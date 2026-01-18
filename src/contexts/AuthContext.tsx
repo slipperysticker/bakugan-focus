@@ -74,8 +74,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const signIn = async () => {
     try {
-      await authService.signInWithGoogle();
-      // Auth state change will be handled by the listener
+      console.log('Starting sign in...');
+      const result = await authService.signInWithGoogle();
+      console.log('Sign in result:', result);
+
+      // Manually load user data if session was created
+      if (result?.session) {
+        console.log('Loading user data for:', result.session.user.email);
+        await loadUserData(result.session.user.id, result.session.user.email || '');
+        console.log('User data loaded successfully');
+      } else {
+        console.log('No session in result');
+      }
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;

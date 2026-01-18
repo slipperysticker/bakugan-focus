@@ -26,10 +26,39 @@ export const authService = {
         provider: 'google',
         options: {
           redirectTo: 'bakuganfocus://auth/callback',
+          skipBrowserRedirect: true,
         },
       });
 
       if (error) throw error;
+
+      // Open the OAuth URL in browser
+      if (data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          'bakuganfocus://auth/callback'
+        );
+
+        if (result.type === 'success' && result.url) {
+          // Parse the URL to extract the tokens from hash fragment
+          const url = new URL(result.url);
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+
+          if (accessToken && refreshToken) {
+            // Set the session with the tokens
+            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+            if (sessionError) throw sessionError;
+            return sessionData;
+          }
+        }
+      }
+
       return data;
     } catch (error) {
       console.error('Google Sign-In Error:', error);

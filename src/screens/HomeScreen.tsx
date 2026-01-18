@@ -26,8 +26,10 @@ export const HomeScreen: React.FC = () => {
    * Check if user already checked in today on mount
    */
   useEffect(() => {
-    checkTodayStatus();
-  }, []);
+    if (user) {
+      checkTodayStatus();
+    }
+  }, [user]);
 
   const checkTodayStatus = async () => {
     if (!user) return;

@@ -23,7 +23,7 @@
       "infoPlist": {
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["com.googleusercontent.apps.YOUR-IOS-CLIENT-ID"]
+            "CFBundleURLSchemes": ["bakuganfocus"]
           }
         ]
       }
@@ -35,16 +35,22 @@
       },
       "package": "com.bakuganfocus.app",
       "versionCode": 1,
-      "permissions": ["INTERNET"]
-    },
-    "plugins": [
-      [
-        "@react-native-google-signin/google-signin",
+      "permissions": ["INTERNET"],
+      "intentFilters": [
         {
-          "iosUrlScheme": "com.googleusercontent.apps.YOUR-IOS-CLIENT-ID"
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "bakuganfocus"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
-    ],
+    },
     "extra": {
       "eas": {
         "projectId": "YOUR-EAS-PROJECT-ID"
