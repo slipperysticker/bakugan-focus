@@ -1,37 +1,36 @@
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { supabase } from '../config/supabase';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+
+// Required for Expo AuthSession
+WebBrowser.maybeCompleteAuthSession();
 
 /**
- * Configure Google Sign-In
+ * Auth Service for Supabase Authentication
+ * Uses Expo AuthSession for Google OAuth
  *
- * IMPORTANT: Replace YOUR-WEB-CLIENT-ID with the actual Web Client ID from Firebase Console
- * Firebase Console > Project Settings > General > Your apps > Web app
+ * IMPORTANT: You need to configure Google OAuth in Supabase Dashboard:
+ * 1. Go to Authentication > Providers > Google
+ * 2. Enable Google provider
+ * 3. Add your Google OAuth Client ID and Secret
  */
-GoogleSignin.configure({
-  webClientId: 'YOUR-WEB-CLIENT-ID.apps.googleusercontent.com',
-  iosClientId: 'YOUR-IOS-CLIENT-ID.apps.googleusercontent.com', // Optional for iOS
-});
 
 export const authService = {
   /**
-   * Sign in with Google using Firebase Authentication
+   * Sign in with Google using Supabase Auth
+   * Uses Expo AuthSession for OAuth flow
    */
   async signInWithGoogle() {
     try {
-      // Check if device supports Google Play Services (Android)
-      await GoogleSignin.hasPlayServices();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'bakuganfocus://auth/callback',
+        },
+      });
 
-      // Trigger Google Sign-In flow
-      const userInfo = await GoogleSignin.signIn();
-
-      // Create Firebase credential from Google ID token
-      const googleCredential = GoogleAuthProvider.credential(userInfo.data?.idToken);
-
-      // Sign in to Firebase with the Google credential
-      const userCredential = await signInWithCredential(auth, googleCredential);
-
-      return userCredential.user;
+      if (error) throw error;
+      return data;
     } catch (error) {
       console.error('Google Sign-In Error:', error);
       throw error;
@@ -39,15 +38,33 @@ export const authService = {
   },
 
   /**
-   * Sign out from both Google and Firebase
+   * Sign out from Supabase
    */
   async signOut() {
     try {
-      await GoogleSignin.signOut();
-      await firebaseSignOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     } catch (error) {
       console.error('Sign-Out Error:', error);
       throw error;
     }
+  },
+
+  /**
+   * Get current session
+   */
+  async getSession() {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return session;
+  },
+
+  /**
+   * Get current user
+   */
+  async getCurrentUser() {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    return user;
   }
 };

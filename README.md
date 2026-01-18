@@ -12,15 +12,15 @@ Help users maintain focus and build streaks by answering one simple question eve
 - **Power Levels:** Gain +1 power for each completed day
 - **Streak Tracking:** Build consecutive day streaks
 - **Progress Timeline:** Visual history of all check-ins
-- **Google Sign-In:** Quick, passwordless authentication
+- **Google Sign-In:** Quick, passwordless authentication via Supabase
 - **Dark Mode:** Easy on the eyes, default theme
 
 ## Tech Stack
 
 - **React Native** with **Expo SDK 54**
 - **TypeScript** for type safety
-- **Firebase Authentication** with Google Sign-In
-- **Cloud Firestore** for data storage
+- **Supabase** for authentication and PostgreSQL database
+- **Google OAuth** via Supabase Auth
 - **React Navigation** for navigation
 - **React Native SVG** for custom orb design
 
@@ -30,7 +30,7 @@ Help users maintain focus and build streaks by answering one simple question eve
 bakugan-focus/
 ├── src/
 │   ├── config/
-│   │   └── firebase.ts           # Firebase initialization
+│   │   └── supabase.ts           # Supabase client initialization
 │   ├── contexts/
 │   │   └── AuthContext.tsx       # Auth state management
 │   ├── types/
@@ -43,7 +43,7 @@ bakugan-focus/
 │   │   ├── HomeScreen.tsx        # Main check-in screen
 │   │   └── ProgressScreen.tsx    # Timeline view
 │   ├── services/
-│   │   ├── authService.ts        # Google auth logic
+│   │   ├── authService.ts        # Supabase auth logic
 │   │   ├── userService.ts        # User CRUD operations
 │   │   └── checkInService.ts     # Check-in logic
 │   ├── utils/
@@ -51,6 +51,8 @@ bakugan-focus/
 │   │   └── streakCalculator.ts   # Streak calculation logic
 │   └── navigation/
 │       └── AppNavigator.tsx      # Navigation setup
+├── supabase/
+│   └── schema.sql                # Database schema
 ├── App.tsx                       # Root component
 ├── app.json                      # Expo configuration
 └── metro.config.js               # Metro bundler config
@@ -62,7 +64,7 @@ bakugan-focus/
 - npm or yarn
 - Expo CLI (`npm install -g expo-cli`)
 - iOS Simulator (Mac) or Android Emulator
-- Firebase account
+- Supabase account
 
 ## Setup Instructions
 
@@ -72,91 +74,66 @@ bakugan-focus/
 npm install
 ```
 
-### 2. Configure Firebase
+### 2. Configure Supabase
 
-Follow the detailed instructions in [FIREBASE_SETUP.md](./FIREBASE_SETUP.md) to:
+Your project is already configured with Supabase credentials in `src/config/supabase.ts`.
 
-1. Create Firebase project
-2. Enable Google Authentication
-3. Set up Firestore database
-4. Register Android and iOS apps
-5. Update configuration files
+Follow the detailed instructions in **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** to:
 
-**Files to update after Firebase setup:**
+1. Run database schema
+2. Enable Google OAuth
+3. Configure deep linking
+4. Test authentication
 
-- `src/config/firebase.ts` - Add Firebase credentials
-- `src/services/authService.ts` - Add Google Client IDs
-- `app.json` - Add iOS URL scheme
+### 3. Run Database Schema
 
-### 3. Run Prebuild
+1. Go to Supabase Dashboard → SQL Editor
+2. Copy contents of `supabase/schema.sql`
+3. Run the SQL to create tables and policies
 
-Generate native iOS and Android folders:
+### 4. Run the App
+
+#### iOS (Mac only)
 
 ```bash
 npx expo prebuild
-```
-
-### 4. Get Android SHA-1
-
-```bash
-cd android
-./gradlew signingReport
-```
-
-Copy the SHA-1 hash and add it to Firebase Console.
-
-### 5. Move Config Files
-
-After prebuild, move Firebase config files:
-
-```bash
-# Android
-cp path/to/google-services.json android/app/
-
-# iOS
-cp path/to/GoogleService-Info.plist ios/
-```
-
-## Running the App
-
-### iOS (Mac only)
-
-```bash
 npx expo run:ios
 ```
 
-### Android
+#### Android
 
 ```bash
+npx expo prebuild
 npx expo run:android
 ```
 
-### Expo Go (Limited)
-
-Google Sign-In won't work in Expo Go. Use native builds or expo-dev-client instead.
+**Note:** Google Sign-In requires native build (won't work in Expo Go).
 
 ## Data Model
 
-### User Document (`users/{uid}`)
+### Users Table
 
 ```typescript
 {
-  uid: string,
-  createdAt: Timestamp,
-  currentStreak: number,
-  maxStreak: number,
+  id: string,              // UUID from Supabase Auth
+  email: string,
+  created_at: string,      // ISO timestamp
+  current_streak: number,
+  max_streak: number,
   power: number,
-  lastCheckInDate: string  // YYYY-MM-DD
+  last_check_in_date: string  // YYYY-MM-DD or null
 }
 ```
 
-### CheckIn Document (`checkIns/{uid}_{YYYY-MM-DD}`)
+### Check-Ins Table
 
 ```typescript
 {
-  uid: string,
-  date: string,  // YYYY-MM-DD
-  completed: true
+  id: number,              // Auto-increment
+  user_id: string,         // Foreign key to users.id
+  date: string,            // YYYY-MM-DD
+  completed: boolean,
+  created_at: string       // ISO timestamp
 }
 ```
 
@@ -205,22 +182,17 @@ eas build --profile production --platform android
 eas submit --platform android
 ```
 
-## Firestore Security Rules
+## Supabase Security
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    match /checkIns/{checkInId} {
-      allow read, write: if request.auth != null &&
-        checkInId.matches('^' + request.auth.uid + '_.*$');
-    }
-  }
-}
-```
+### Row Level Security (RLS)
+
+All tables have RLS enabled. Users can only:
+- ✅ Read their own data
+- ✅ Insert their own data
+- ✅ Update their own data
+- ❌ Access other users' data
+
+Policies are automatically created by `supabase/schema.sql`.
 
 ## Design Constraints
 
@@ -230,7 +202,7 @@ service cloud.firestore {
 ✅ Power level tracking
 ✅ Streak tracking
 ✅ Progress timeline
-✅ Google Sign-In
+✅ Google Sign-In via Supabase
 ✅ Dark mode theme
 ✅ Custom Bakugan-inspired orb
 
@@ -248,20 +220,19 @@ service cloud.firestore {
 
 ### Google Sign-In Fails
 
-- Verify Web Client ID in `authService.ts`
-- Verify iOS Client ID in `app.json` is reversed format
-- Verify Android SHA-1 added to Firebase Console
+- Verify Google OAuth is enabled in Supabase Dashboard
+- Verify redirect URI matches: `https://mmeshpxloyttkoohpobv.supabase.co/auth/v1/callback`
+- Verify SHA-1 added to Google Cloud Console (Android)
 
-### "Network request failed"
+### "relation 'users' does not exist"
 
-- Check internet connection
-- Verify Firestore security rules are published
-- Verify Firebase API key is correct
+- Run the SQL schema from `supabase/schema.sql`
+- Check Supabase Dashboard → SQL Editor
 
 ### Check-In Button Not Working
 
-- Check Firebase credentials in `firebase.ts`
-- Check Firestore security rules allow write
+- Check Supabase credentials in `supabase.ts`
+- Check RLS policies are enabled
 - Check console for error messages
 
 ## Key Files Reference
@@ -279,26 +250,32 @@ service cloud.firestore {
 
 ### Configuration
 
-- `app.json` - OAuth deep linking configuration
-- `src/config/firebase.ts` - Firebase credentials
-- `metro.config.js` - ES module resolution fix
+- `app.json` - Deep linking configuration
+- `src/config/supabase.ts` - Supabase credentials
+- `supabase/schema.sql` - Database schema and RLS policies
 
 ## Known Issues
 
-1. **Expo Go Limitation:** Google Sign-In requires native build or expo-dev-client
+1. **Expo Go Limitation:** Google Sign-In requires native build
 2. **Timezone:** Uses device local time (not UTC)
 3. **Offline:** Requires internet connection for all operations
 
 ## Next Steps
 
-- [ ] Complete Firebase setup
+- [x] Supabase project created
+- [ ] Run database schema
+- [ ] Enable Google OAuth in Supabase
 - [ ] Test on iOS simulator
 - [ ] Test on Android emulator
-- [ ] Create app icons (512x512)
-- [ ] Create splash screen
+- [ ] Get SHA-1 and test on devices
 - [ ] Build with EAS
 - [ ] Submit to TestFlight
 - [ ] Submit to Google Play Internal Testing
+
+## Documentation
+
+- **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** - Complete Supabase setup guide
+- **[supabase/schema.sql](./supabase/schema.sql)** - Database schema
 
 ## License
 

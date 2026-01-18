@@ -6,8 +6,7 @@ import {
   StyleSheet,
   ActivityIndicator
 } from 'react-native';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { supabase } from '../config/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { TimelineIcon } from '../components/TimelineIcon';
 import { format } from 'date-fns';
@@ -33,7 +32,7 @@ export const ProgressScreen: React.FC = () => {
   }, []);
 
   /**
-   * Load timeline from Firestore
+   * Load timeline from Supabase
    * Builds a day-by-day view from user creation to today
    */
   const loadTimeline = async () => {
@@ -41,23 +40,19 @@ export const ProgressScreen: React.FC = () => {
 
     try {
       // Get all check-ins for this user
-      const checkInsRef = collection(db, 'checkIns');
-      const q = query(
-        checkInsRef,
-        where('uid', '==', user.uid)
-      );
+      const { data: checkIns, error } = await supabase
+        .from('check_ins')
+        .select('date')
+        .eq('user_id', user.id);
 
-      const querySnapshot = await getDocs(q);
-      const checkInDates = new Set<string>();
+      if (error) throw error;
 
-      querySnapshot.forEach((doc) => {
-        checkInDates.add(doc.data().date);
-      });
+      const checkInDates = new Set<string>(checkIns?.map(c => c.date) || []);
 
       // Build timeline from user creation to today
       const timelineData: TimelineDay[] = [];
       const today = new Date();
-      const startDate = user.createdAt;
+      const startDate = new Date(user.created_at);
 
       const currentDate = new Date(startDate);
       while (currentDate <= today) {

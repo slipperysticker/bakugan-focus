@@ -1,9 +1,9 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { supabase } from '../config/supabase';
 import { authService } from '../services/authService';
 import { userService } from '../services/userService';
 import { User, AuthContextType } from '../types';
+import { Session } from '@supabase/supabase-js';
 
 // Create Auth Context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,16 +21,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   /**
-   * Load user data from Firestore
+   * Load user data from Supabase
    */
-  const loadUserData = async (uid: string) => {
+  const loadUserData = async (userId: string, email: string) => {
     try {
-      let userData = await userService.getUser(uid);
+      let userData = await userService.getUser(userId);
 
-      // If user doesn't exist in Firestore, create new user document
+      // If user doesn't exist in database, create new user record
       if (!userData) {
-        await userService.createUser(uid);
-        userData = await userService.getUser(uid);
+        await userService.createUser(userId, email);
+        userData = await userService.getUser(userId);
       }
 
       setUser(userData);
@@ -40,22 +40,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   /**
-   * Listen for Firebase auth state changes
+   * Listen for Supabase auth state changes
    */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // User is signed in
-        await loadUserData(firebaseUser.uid);
-      } else {
-        // User is signed out
-        setUser(null);
+    // Check active session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadUserData(session.user.id, session.user.email || '');
       }
       setLoading(false);
     });
 
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session?.user) {
+          // User is signed in
+          await loadUserData(session.user.id, session.user.email || '');
+        } else {
+          // User is signed out
+          setUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
     // Cleanup subscription
-    return () => unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   /**
@@ -63,10 +74,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const signIn = async () => {
     try {
-      const firebaseUser = await authService.signInWithGoogle();
-      if (firebaseUser) {
-        await loadUserData(firebaseUser.uid);
-      }
+      await authService.signInWithGoogle();
+      // Auth state change will be handled by the listener
     } catch (error) {
       console.error('Sign in error:', error);
       throw error;
@@ -87,12 +96,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   /**
-   * Refresh user data from Firestore
+   * Refresh user data from Supabase
    * Used after check-ins to update streak and power
    */
   const refreshUser = async () => {
     if (user) {
-      await loadUserData(user.uid);
+      const userData = await userService.getUser(user.id);
+      if (userData) {
+        setUser(userData);
+      }
     }
   };
 

@@ -33,7 +33,7 @@ export const HomeScreen: React.FC = () => {
     if (!user) return;
 
     try {
-      const checkedIn = await checkInService.hasCheckedInToday(user.uid);
+      const checkedIn = await checkInService.hasCheckedInToday(user.id);
       setHasCheckedIn(checkedIn);
     } catch (error) {
       console.error('Error checking today status:', error);
@@ -51,7 +51,7 @@ export const HomeScreen: React.FC = () => {
 
     setCheckingIn(true);
     try {
-      await checkInService.createCheckIn(user.uid);
+      await checkInService.createCheckIn(user.id);
       await refreshUser(); // Refresh user data to show updated power and streak
       setHasCheckedIn(true);
       Alert.alert('Success!', 'Check-in complete. Power +1!');
@@ -95,7 +95,7 @@ export const HomeScreen: React.FC = () => {
 
         <View style={styles.statBox}>
           <Text style={styles.statLabel}>Current Streak</Text>
-          <Text style={styles.statValue}>{user.currentStreak} days</Text>
+          <Text style={styles.statValue}>{user.current_streak} days</Text>
         </View>
       </View>
 

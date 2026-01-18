@@ -1,5 +1,4 @@
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { supabase } from '../config/supabase';
 import { getTodayString } from '../utils/dateUtils';
 import { calculateNewStreak } from '../utils/streakCalculator';
 import { userService } from './userService';
@@ -7,17 +6,29 @@ import { userService } from './userService';
 export const checkInService = {
   /**
    * Check if user has already checked in today
-   * @param uid - User ID
+   * @param userId - User ID
    * @returns true if already checked in today, false otherwise
    */
-  async hasCheckedInToday(uid: string): Promise<boolean> {
+  async hasCheckedInToday(userId: string): Promise<boolean> {
     try {
       const today = getTodayString();
-      const checkInId = `${uid}_${today}`;
-      const checkInRef = doc(db, 'checkIns', checkInId);
-      const checkInSnap = await getDoc(checkInRef);
 
-      return checkInSnap.exists();
+      const { data, error } = await supabase
+        .from('check_ins')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned - not checked in today
+          return false;
+        }
+        throw error;
+      }
+
+      return !!data;
     } catch (error) {
       console.error('Error checking today status:', error);
       throw error;
@@ -28,45 +39,48 @@ export const checkInService = {
    * Create a new check-in for today
    * Updates user's streak and power level
    *
-   * @param uid - User ID
+   * @param userId - User ID
    * @throws Error if already checked in today or user not found
    */
-  async createCheckIn(uid: string): Promise<void> {
+  async createCheckIn(userId: string): Promise<void> {
     try {
       const today = getTodayString();
 
       // Prevent duplicate check-ins for the same day
-      const alreadyCheckedIn = await this.hasCheckedInToday(uid);
+      const alreadyCheckedIn = await this.hasCheckedInToday(userId);
       if (alreadyCheckedIn) {
         throw new Error('Already checked in today');
       }
 
       // Get current user data
-      const userData = await userService.getUser(uid);
+      const userData = await userService.getUser(userId);
       if (!userData) {
         throw new Error('User not found');
       }
 
       // Calculate new streak based on last check-in date
       const newStreak = calculateNewStreak(
-        userData.lastCheckInDate,
-        userData.currentStreak
+        userData.last_check_in_date || '',
+        userData.current_streak
       );
 
-      // Create check-in document with composite ID: uid_YYYY-MM-DD
-      const checkInId = `${uid}_${today}`;
-      await setDoc(doc(db, 'checkIns', checkInId), {
-        uid,
-        date: today,
-        completed: true
-      });
+      // Create check-in record
+      const { error: checkInError } = await supabase
+        .from('check_ins')
+        .insert({
+          user_id: userId,
+          date: today,
+          completed: true
+        });
 
-      // Update user document with new values
-      await userService.updateUser(uid, {
-        currentStreak: newStreak,
-        maxStreak: Math.max(newStreak, userData.maxStreak),
+      if (checkInError) throw checkInError;
+
+      // Update user record with new values
+      await userService.updateUser(userId, {
+        current_streak: newStreak,
+        max_streak: Math.max(newStreak, userData.max_streak),
         power: userData.power + 1,
-        lastCheckInDate: today
+        last_check_in_date: today
       });
 
     } catch (error) {
